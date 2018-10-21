@@ -54,9 +54,38 @@ unsigned char ptrBuffer_ConfirmedData = 0;
 unsigned char ptrBuffer_ReceivingData = 0;
 unsigned char lcdCurrentOffset = 0;
 
-unsigned char lcdLines[NUM_LCD_STORED_LINES][21];
+unsigned char lcdLines[NUM_LCD_STORED_LINES][20];
+
+#define DEBOUNCE_COUNTER_RESET 3
+
+unsigned char stableInputStatus = 3;
+unsigned char previousInputStatus = 3;
+unsigned char debounceCounter = DEBOUNCE_COUNTER_RESET;
+
+void scrollLcdDown();
+void scrollLcdUp();
 
 void interrupt isr() {
+    if (PIR0bits.TMR0IF) {
+        PIR0bits.TMR0IF = 0;
+        unsigned char currentInputStatus = PORTC & 0x03u;
+        if (currentInputStatus != previousInputStatus) {
+            previousInputStatus = currentInputStatus;
+            debounceCounter = DEBOUNCE_COUNTER_RESET;
+        } else if (debounceCounter > 0) {
+            debounceCounter--;
+            if (debounceCounter == 0) {
+                // Detect falling edges (stable[i] = 1 becomes current[i] = 0)
+                unsigned char activated = stableInputStatus & (currentInputStatus ^ 0xFFu);
+                if (activated & 1) {
+                    scrollLcdDown();
+                } else if (activated & 2) {
+                    scrollLcdUp();
+                }
+                stableInputStatus = currentInputStatus; // persist into stable
+            }
+        }
+    }
     while (PIR1bits.RCIF) {
         if (RC1STAbits.OERR) {
             RB7 = 1;
@@ -71,9 +100,6 @@ void interrupt isr() {
             startOfSysexFound = 0;
             ptrBuffer_ReceivingData = ptrBuffer_ConfirmedData;
         } else {
-            //buffer[ptrBuffer_ReceivingData] = data;
-            //AdvancePointer(ptrBuffer_ReceivingData);
-            //ptrBuffer_ConfirmedData = ptrBuffer_ReceivingData;
             if (data == MIDI_STATUS_SYSEX) {
                 startOfSysexFound = 1;
                 ptrBuffer_ReceivingData = ptrBuffer_ConfirmedData;
@@ -89,17 +115,6 @@ void interrupt isr() {
     }
 }
 
-void scrollLcdDown() {
-    unsigned char maxOffset = NUM_LCD_STORED_LINES - NUM_LCD_LINES;
-    if (lcdCurrentOffset < maxOffset) {
-        lcdCurrentOffset++;
-    }
-}
-void scrollLcdUp() {
-    if (lcdCurrentOffset > 0) {
-        lcdCurrentOffset--;
-    }
-}
 void updateLcd();
 void copyFromReadBuffer(unsigned char* output, unsigned char index, unsigned char size);
 
@@ -108,30 +123,10 @@ void main(void) {
 
     LCDclear();
 
-    LCDsetCursor(0, 3);
-    LCD_Write_Str("Test with MIDI");
-
-    LCDsetCursor(0, 0);
+    LCDsetCursor(0, 1);
+    LCD_Write_Str("ML 2018.10.21");
 
     while (1) {
-        /*while (ptrBuffer_ToRead != ptrBuffer_ConfirmedData) {
-            unsigned char data = buffer[ptrBuffer_ToRead];
-            unsigned char toPrint = data >> 4;
-            if (toPrint < 10) {
-                toPrint += '0';
-            } else {
-                toPrint = toPrint - 10 + 'A';
-            }
-            LCD_Write_Char(toPrint);
-            toPrint = data & 0x0F;
-            if (toPrint < 10) {
-                toPrint += '0';
-            } else {
-                toPrint = toPrint - 10 + 'A';
-            }
-            LCD_Write_Char(toPrint);
-            AdvancePointer(ptrBuffer_ToRead);
-        }*/
         if (ptrBuffer_ToRead != ptrBuffer_ConfirmedData) {
             // New data available
             if (buffer[ptrBuffer_ToRead] == HAUPTWERK_SYSEX_MANUFACTURER_ID) {
@@ -146,8 +141,6 @@ void main(void) {
                     unsigned char offset = id_lsb * 2u;
                     copyFromReadBuffer(lcdLines[offset], 2, 16);
                     copyFromReadBuffer(lcdLines[offset + 1u], 2, 16);
-                    lcdLines[offset][20] = 1;
-                    lcdLines[offset + 1u][20] = 1;
                 }
             }
             // Read until end of sysex
@@ -174,9 +167,18 @@ void init() {
     TRISA = 0;
     TRISB = 0b01110000;
     WPUC = 0xFF;
-    TRISC = 0;
+    TRISC = 0b00000011;
 
     RXPPS = 0x0D; // RB5 is already default PPS for RX input
+
+    // TIMER0 CONFIGURATION
+    // 8bit timer with no pre/post-scaler
+    // 256 * 0,125 = 32 ms
+    T0CON1 = 0b01000000; // Clock source Fosc /4
+    TMR0H = 0xFF;
+    TMR0L = 0;
+    T0CON0bits.T0EN = 1; // Enable
+    PIE0bits.TMR0IE = 1;
 
     // I2C INTERFACE CONFIGURATION
     SSP1DATPPS = 0b00001100; // SDA1 input is RB4
@@ -192,11 +194,10 @@ void init() {
     LCD_Init();
 
     // Clear buffers
-    for (unsigned char i = 0; i < 4; ++i) {
+    for (unsigned char i = 0; i < NUM_LCD_STORED_LINES; ++i) {
         for (unsigned char j = 0; j < 20; ++j) {
             lcdLines[i][j] = ' ';
         }
-        lcdLines[i][20] = 0;
     }
 
     // INPUT MIDI INTERFACE CONFIGURATION (EUSART)
@@ -226,12 +227,21 @@ void copyFromReadBuffer(unsigned char* output, unsigned char index, unsigned cha
 void updateLcd() {
     for (unsigned char i = 0; i < 4; ++i) {
         unsigned char row = (unsigned char)lcdCurrentOffset + i;
-        if (lcdLines[row][20]) {
-            lcdLines[row][20] = 0;
-            LCDsetCursor(0, i);
-            for (unsigned char j = 0; j < 20; ++j) {
-                LCDdataWrite(lcdLines[row][j]);
-            }
+        LCDsetCursor(0, i);
+        for (unsigned char j = 0; j < 20; ++j) {
+            LCDdataWrite(lcdLines[row][j]);
         }
+    }
+}
+
+void scrollLcdDown() {
+    unsigned char maxOffset = NUM_LCD_STORED_LINES - NUM_LCD_LINES;
+    if (lcdCurrentOffset < maxOffset) {
+        lcdCurrentOffset++;
+    }
+}
+void scrollLcdUp() {
+    if (lcdCurrentOffset > 0) {
+        lcdCurrentOffset--;
     }
 }
