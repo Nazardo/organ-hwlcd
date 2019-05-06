@@ -2,7 +2,11 @@
 
 // CONFIG1
 #pragma config FEXTOSC = HS     // FEXTOSC External Oscillator mode Selection bits (HS (crystal oscillator) above 4 MHz)
+#ifdef XTAL_20_MHZ
+#pragma config RSTOSC = EXT1X   // Power-up default value for COSC bits (EXTSC operating per FEXTOSC bits)
+#else
 #pragma config RSTOSC = HFINT32 // Power-up default value for COSC bits (HFINTOSC with 2x PLL (32MHz))
+#endif
 #pragma config CLKOUTEN = OFF   // Clock Out Enable bit (CLKOUT function is disabled; I/O or oscillator function on OSC2)
 #pragma config CSWEN = ON       // Clock Switch Enable bit (Writing to NOSC and NDIV is allowed)
 #pragma config FCMEN = OFF      // Fail-Safe Clock Monitor Enable (Fail-Safe Clock Monitor is disabled)
@@ -32,8 +36,6 @@
 
 #define _XTAL_FREQ 32000000
 
-void init();
-
 #define BUFFER_SIZE 200u
 
 #define NUM_LCD_LINES 4
@@ -47,8 +49,8 @@ void init();
 #define AdvancePointer(PTR) PTR = ((PTR+1u) % BUFFER_SIZE)
 
 unsigned char buffer[BUFFER_SIZE];
-bit readingFERR = 0;
-bit startOfSysexFound = 0;
+__bit readingFERR = 0;
+__bit startOfSysexFound = 0;
 unsigned char ptrBuffer_ToRead = 0;
 unsigned char ptrBuffer_ConfirmedData = 0;
 unsigned char ptrBuffer_ReceivingData = 0;
@@ -62,10 +64,11 @@ unsigned char stableInputStatus = 3;
 unsigned char previousInputStatus = 3;
 unsigned char debounceCounter = DEBOUNCE_COUNTER_RESET;
 
-void scrollLcdDown();
-void scrollLcdUp();
+void init(void);
+void scrollLcdDown(void);
+void scrollLcdUp(void);
 
-void interrupt isr() {
+void __interrupt() isr() {
     if (PIR0bits.TMR0IF) {
         PIR0bits.TMR0IF = 0;
         unsigned char currentInputStatus = PORTC & 0x03u;
@@ -115,7 +118,7 @@ void interrupt isr() {
     }
 }
 
-void updateLcd();
+void updateLcd(void);
 void copyFromReadBuffer(unsigned char* output, unsigned char index, unsigned char size);
 
 void main(void) {
@@ -190,7 +193,7 @@ void init() {
     SSP1CON1bits.SSPM = 0x08; // I2C Master Mode
     SSP1CON1bits.SSPEN = 1; // Enable SSP1
 
-    delay_init_32Mhz();
+    delay_with_timer_init();
     LCD_Init();
 
     // Clear buffers

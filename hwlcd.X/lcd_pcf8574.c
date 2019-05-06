@@ -113,29 +113,29 @@ void LCD_Init(void){
     _numlines = LCD_MAX_ROWS;
 
     // Ensure supply rails are up before config sequence
-    delay_us(50000);
+    delay_with_timer_us(50000);
 
     // Set all control and data lines low. D4 - D7, En (High=1), Rw (Low = 0 or Write), Rs (Control/Instruction) (Low = 0 or Control)
     i2c_write_byte(LCD_PCF8574_ADDR, LCD_INIT); // Backlight off (Bit 3 = 0)
-    delay_us(100);
+    delay_with_timer_us(100);
 
     // Sequence to put the LCD into 4 bit mode this is according to the hitachi HD44780 datasheet page 109
 
     // we start in 8bit mode
     LCDwrite4bits(LCD_8BIT_INIT);
-    delay_us(4500);  // wait more than 4.1ms
+    delay_with_timer_us(4500);  // wait more than 4.1ms
 
     // second write
     LCDwrite4bits(LCD_8BIT_INIT);
-    delay_us(150); // wait > 100us
+    delay_with_timer_us(150); // wait > 100us
 
     // third write
     LCDwrite4bits(LCD_8BIT_INIT);
-    delay_us(150);
+    delay_with_timer_us(150);
 
     // now set to 4-bit interface
     LCDwrite4bits(LCD_4BIT_INIT);
-    delay_us(150);
+    delay_with_timer_us(150);
 
     // set # lines, font size, etc.
     _functionset = LCD_INTF4BITS | LCD_TWO_LINES | LCD_FONT_5_7;
@@ -190,7 +190,7 @@ void LCDclear(void){
 #ifdef USE_BUSY_FLAG
     while (LCDbusy()){};
 #else
-    delay_us(30000);  // this command takes a long time!
+    delay_with_timer_us(30000);  // this command takes a long time!
 #endif
 }
 
@@ -199,7 +199,7 @@ void LCDhome(void){
 #ifdef USE_BUSY_FLAG
     while (LCDbusy()){};
 #else
-    delay_us(30000);  // this command takes a long time!
+    delay_with_timer_us(30000);  // this command takes a long time!
 #endif
 }
 
@@ -394,18 +394,18 @@ static unsigned char LCDread4bits(unsigned char RsEnMode) {
 
 static void LCDpulseEnableNeg(unsigned char _data){
     LCDwritePCF8574(_data | En);	// En high
-    delay_us(1);		// enable pulse must be >450ns
+    delay_with_timer_us(1);		// enable pulse must be >450ns
 
     LCDwritePCF8574(_data & ~En);	// En low
-    delay_us(50);		// commands need > 37us to settle
+    delay_with_timer_us(50);		// commands need > 37us to settle
 }
 
 static void LCDpulseEnablePos(unsigned char _data){
     LCDwritePCF8574(_data & ~En);	// En low
-    delay_us(1);		// enable pulse must be >450ns
+    delay_with_timer_us(1);		// enable pulse must be >450ns
 
     LCDwritePCF8574(_data | En);	// En high
-    delay_us(50);		// commands need > 37us to settle
+    delay_with_timer_us(50);		// commands need > 37us to settle
 }
 
 
