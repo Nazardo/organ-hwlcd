@@ -54,7 +54,22 @@ unsigned char ptrBuffer_ConfirmedData = 0;
 unsigned char ptrBuffer_ReceivingData = 0;
 unsigned char lcdCurrentOffset = 0;
 
-unsigned char lcdLines[NUM_LCD_STORED_LINES][20];
+// The LCD module is a 20x4, but Hauptwerk only handles strings
+// of 16 characters, so we center them in the middle of each 20 characters
+// LCD line.
+
+unsigned char lcdLines[NUM_LCD_STORED_LINES][20] = {
+    { ' ',' ','H','a','u','p','t','w','e','r','k',' ',' ',' ',' ','L','C','D',' ',' ' },
+    { ' ',' ','v',' ','1','.','0',' ',' ',' ',' ','2','0','1','9',' ','M','L',' ',' ' },
+    { ' ',' ','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',' ',' ' },
+    { ' ',' ',' ','O','r','g','a','n','o',' ','d','i',' ','N','o','l','e',' ',' ',' ' },
+    { ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' },
+    { ' ',' ',' ',' ',' ','2','0','1','9','-','0','4','-','2','7',' ',' ',' ',' ',' ' },
+    { ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' },
+    { ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' },
+    { ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' },
+    { ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' }
+};
 
 #define DEBOUNCE_COUNTER_RESET 3
 
@@ -123,9 +138,6 @@ void main(void) {
 
     LCDclear();
 
-    LCDsetCursor(0, 1);
-    LCD_Write_Str("ML 2018.10.21");
-
     while (1) {
         if (ptrBuffer_ToRead != ptrBuffer_ConfirmedData) {
             // New data available
@@ -193,13 +205,6 @@ void init() {
     delay_init_32Mhz();
     LCD_Init();
 
-    // Clear buffers
-    for (unsigned char i = 0; i < NUM_LCD_STORED_LINES; ++i) {
-        for (unsigned char j = 0; j < 20; ++j) {
-            lcdLines[i][j] = ' ';
-        }
-    }
-
     // INPUT MIDI INTERFACE CONFIGURATION (EUSART)
     // Set baud-rate = fosc / [16 * (n+1)] = 32M / 16*40 = 31.25k
     SP1BRGH = 0;
@@ -226,7 +231,7 @@ void copyFromReadBuffer(unsigned char* output, unsigned char index, unsigned cha
 
 void updateLcd() {
     for (unsigned char i = 0; i < 4; ++i) {
-        unsigned char row = (unsigned char)lcdCurrentOffset + i;
+        unsigned char row = (unsigned char)(lcdCurrentOffset + i);
         LCDsetCursor(0, i);
         for (unsigned char j = 0; j < 20; ++j) {
             LCDdataWrite(lcdLines[row][j]);
